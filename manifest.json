@@ -1,0 +1,18 @@
+{
+  "manifest_version": 2,
+  "name": "Privat24 Statements Exporter",
+  "version": "1.0",
+  "permissions": [
+    "webRequest"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://next.privat24.ua/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "icons": {
+    "48": "icon-48.png"
+  },
+  "description": "Exports statements for all cards for the previous month"
+}
