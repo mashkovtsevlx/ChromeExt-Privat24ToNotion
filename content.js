@@ -1,22 +1,27 @@
 const cardIds = ["URLRL2KE7M4OH81AQSM",]
 
-// Get previous month start and end date in format DD.MM.yyyy
-// Add zeroes to the start of the month if it is less than 10
-const getPreviousMonthDates = () => {
+const getMonthStartEndDates = (nMonthsBefore = 0) => {
+  console.log(nMonthsBefore);
   const date = new Date();
   const month = date.getMonth();
   const year = date.getFullYear();
-  const lastDayOfPreviousMonth = new Date(year, month, 0).getDate();
-  const previousMonth = month === 0 ? 12 : month;
-  const previousYear = month === 0 ? year - 1 : year;
+  
+  // Get current month minus nMonthsBefore
+  const previousMonth = month - nMonthsBefore + 1;
+  const previousYear = year;
+  if (previousMonth < 0) {
+    previousMonth = 12 + previousMonth;
+    previousYear = year - 1;
+  }
+  const lastDayOfPreviousMonth = new Date(previousYear, previousMonth, 0).getDate();
   const startDate = `01.${previousMonth < 10 ? `0${previousMonth}` : previousMonth}.${previousYear}`;
   const endDate = `${lastDayOfPreviousMonth}.${previousMonth < 10 ? `0${previousMonth}` : previousMonth}.${previousYear}`;
+  console.log(startDate, endDate);
   return { startDate, endDate };
 }
 
 // Get statement for the previous month for each card
-const getStatements = async (cards, xref) => {
-  const { startDate, endDate } = getPreviousMonthDates();
+const getStatements = async (cards, xref, startDate, endDate) => {
   const statements = [];
   for (const card of cards) {
     const response = await fetch(`https://next.privat24.ua/api/p24/statements?xref=${xref}&action=export&dateFrom=${startDate}&dateTo=${endDate}&cardId=${card.id}`, {
@@ -32,7 +37,18 @@ const getStatements = async (cards, xref) => {
   return statements;
 }
 
-const main = async (retries = 5) => {
+const sendStatements = async (statements) => {
+  await fetch('https://867epboou8.execute-api.us-east-1.amazonaws.com/prod/webhooks', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({statements}),
+    mode: 'no-cors'
+  });
+}
+
+const main = async (startDate, endDate, retries = 5) => {
   await new Promise(resolve => setTimeout(resolve, 300));
   if (retries < 0)
     return;
@@ -46,11 +62,12 @@ const main = async (retries = 5) => {
       const cards = await getCards(xref);
       console.log(cards);
 
-      const statements = await getStatements(cards.data, xref);
+      const statements = await getStatements(cards.data, xref, startDate, endDate);
+      await sendStatements(statements);
       return;
     }
   }
-  return main(retries - 1);
+  return main(startDate, endDate, retries - 1);
 }
 
 const getCards = async (xref) => {
@@ -64,7 +81,16 @@ const getCards = async (xref) => {
   return data;
 }
 
-main();
-console.log(getPreviousMonthDates())
-
-//https://next.privat24.ua/api/p24/statements?xref=527d4525d1f38839a282085312f5e486&action=export&dateFrom=29.08.2024&dateTo=31.08.2024&cardId=URLRL2KE7M4OH81AQSM
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'fetchData') {
+    if (message.nMonthsBefore) {
+      const { startDate, endDate } = getMonthStartEndDates(message.nMonthsBefore);
+      sendResponse({ message: "✅ Fetching data" });
+      main(startDate, endDate);
+    } else {
+      const { startDate, endDate } = getMonthStartEndDates(1);
+      sendResponse({ message: "✅ Fetching data" });
+      main(startDate, endDate);
+    }
+  }
+});
